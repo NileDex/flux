@@ -1,0 +1,259 @@
+import React, { useState, useEffect } from 'react';
+import { gql } from 'graphql-request';
+import { createClient } from '../util/graphqlClient';
+import Penguin from '../assets/Penguin.png'; // Make sure this path is correct
+
+
+interface NFT {
+  id: string;
+  token_id: string;
+  name: string;
+  media_url: string;
+  media_type: string;
+  collection: {
+    title: string;
+    floor: number | null;
+  };
+}
+
+const WalletInventory = ({ walletAddress }: { walletAddress: string }) => {
+  const [nfts, setNfts] = useState<NFT[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedNFT, setSelectedNFT] = useState<NFT | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const IPFS_GATEWAYS = [
+    'https://ipfs.io/ipfs/',
+    'https://cloudflare-ipfs.com/ipfs/',
+    'https://gateway.pinata.cloud/ipfs/',
+    'https://dweb.link/ipfs/'
+  ];
+
+  const getMediaUrl = (nft: NFT): string | null => {
+    if (!nft.media_url) return null;
+    
+    // If it's already a complete HTTP URL, return it directly
+    if (nft.media_url.startsWith('http')) {
+      return nft.media_url;
+    }
+    
+    // Handle IPFS URL formats
+    if (nft.media_url.startsWith('ipfs://')) {
+      const ipfsHash = nft.media_url.replace('ipfs://', '');
+      return `${IPFS_GATEWAYS[0]}${ipfsHash}`;
+    }
+    
+    // For other formats, try to extract the hash
+    const ipfsHash = nft.media_url
+      .replace('ipfs://', '')
+      .replace('https://ipfs.io/ipfs/', '')
+      .replace('https://cloudflare-ipfs.com/ipfs/', '');
+    
+    return `${IPFS_GATEWAYS[0]}${ipfsHash}`;
+  };
+
+  const fetchNFTs = async () => {
+    try {
+      const client = createClient();
+      
+      const query = gql`
+        query GetWalletNFTs($address: String!) {
+          movement {
+            nfts(where: {owner: {_eq: $address}, burned: {_eq: false}}) {
+              id
+              token_id
+              name
+              media_url
+              media_type
+              collection {
+                title
+                floor
+              }
+            }
+          }
+        }
+      `;
+
+      const response = await client.request<{ movement: { nfts: NFT[] } }>(query, {
+        address: walletAddress
+      });
+      
+      setNfts(response.movement.nfts);
+    } catch (error) {
+      console.error('Error fetching NFTs:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (walletAddress) {
+      fetchNFTs();
+    }
+  }, [walletAddress]);
+
+  const openNFTModal = (nft: NFT) => {
+    setSelectedNFT(nft);
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setSelectedNFT(null);
+  };
+
+  const renderMedia = (nft: NFT, mediaUrl: string | null, isModal = false) => {
+    const displayName = nft.name || `#${nft.token_id}`;
+    const className = isModal ? "modal-nft-media" : "nft-media";
+    
+    if (!mediaUrl) {
+      return <div className="media-placeholder">{displayName}</div>;
+    }
+    
+    const isVideo = nft.media_type?.startsWith('video/') || 
+      mediaUrl.endsWith('.mp4') || 
+      mediaUrl.endsWith('.webm') || 
+      mediaUrl.endsWith('.ogg');
+
+    if (!isVideo) {
+      return (
+        <img 
+          src={mediaUrl} 
+          alt={displayName}
+          className={className}
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            target.src = '/placeholder-nft.png';
+            target.onerror = null;
+          }}
+        />
+      );
+    } else {
+      return (
+        <video controls className={className}>
+          <source src={mediaUrl} type={nft.media_type || 'video/mp4'} />
+          Your browser does not support video playback.
+        </video>
+      );
+    }
+  };
+
+  const formatMove = (value: number | null) => {
+    if (value === null || value === undefined) return '-';
+    const moveValue = value / 100000000;
+    return moveValue.toLocaleString(undefined, { maximumFractionDigits: 4 }) + ' Move';
+  };
+
+  if (loading) return <div className="loading">Loading NFTs...</div>;
+  if (nfts.length === 0) return (
+    <div className="no-nfts">
+      <img src={Penguin} alt="No NFTs found" className="no-nfts-image" />
+      <p>No NFTs found in this wallet</p>
+    </div>
+  );
+
+  return (
+    <div className="nft-container">
+      <table className="nft-table">
+        <thead>
+          <tr>
+            <th>Media</th>
+            <th>Name</th>
+            <th>Collection</th>
+            <th>Token ID</th>
+            <th>Floor Price</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {nfts.map(nft => {
+            const mediaUrl = getMediaUrl(nft);
+            const displayName = nft.name || `#${nft.token_id}`;
+            return (
+              <tr key={nft.id}>
+                <td className="nft-table-media">
+                  <div className="media-container">
+                    {renderMedia(nft, mediaUrl)}
+                  </div>
+                </td>
+                <td>{displayName}</td>
+                <td>{nft.collection.title}</td>
+                <td>{nft.token_id}</td>
+                <td>{nft.collection.floor ? formatMove(nft.collection.floor) : '-'}</td>
+                <td>
+                  <button 
+                    className="view-nft-btn"
+                    onClick={() => openNFTModal(nft)}
+                  >
+                    View NFT
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {modalOpen && selectedNFT && (
+        <div className="nft-modal-overlay" onClick={closeModal}>
+          <div className="nft-modal-content" onClick={e => e.stopPropagation()}>
+            <button className="close-modal" onClick={closeModal}>×</button>
+            <div className="modal-media-container">
+              {renderMedia(selectedNFT, getMediaUrl(selectedNFT), true)}
+            </div>
+            <div className="modal-nft-details">
+              <h2>{selectedNFT.name || `#${selectedNFT.token_id}`}</h2>
+              <p className="modal-collection">{selectedNFT.collection.title}</p>
+              <div className="nft-metadata">
+                <div className="metadata-item">
+                  <span className="label">Token ID:</span>
+                  <span className="value">{selectedNFT.token_id}</span>
+                </div>
+                {selectedNFT.collection.floor && (
+                  <div className="metadata-item">
+                    <span className="label">Floor Price:</span>
+                    <span className="value">{formatMove(selectedNFT.collection.floor)}</span>
+                  </div>
+                )}
+              </div>
+              {getMediaUrl(selectedNFT) && (
+                <a 
+                  href={getMediaUrl(selectedNFT) as string} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="view-original-btn"
+                >
+                  View Original
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default WalletInventory;
+
+
+
+
+
+
+
+
+
+import WalletInventory from "../Walletchecks/WalletInventory";
+
+
+
+
+
+
+
+    {/* <div className="metrics-section">
+            <div className="wallet-inventory-card">
+              <WalletInventory walletAddress={selectedAddress || ""} />
+            </div>
+          </div> */}

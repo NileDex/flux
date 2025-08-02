@@ -1,0 +1,108 @@
+import { useState, useEffect } from 'react';
+import { gql } from 'graphql-request';
+import { createClient } from '../util/graphqlClient';
+
+interface Collection {
+  id: string;
+  slug: string;
+  semantic_slug: string;
+  title: string;
+  cover_url: string;
+  floor: number;
+}
+
+interface CollectionsResponse {
+  movement: {
+    collections: Collection[];
+  };
+}
+
+interface CollectionsTableProps {
+  where?: any; // Adjust the type according to your needs
+  order_by?: any[]; // Adjust the type according to your needs
+}
+
+const CollectionsTable = ({ where = {}, order_by = [] }: CollectionsTableProps) => {
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchCollections = async () => {
+      try {
+        setLoading(true);
+        const client = createClient();
+        
+        const query = gql`
+          query fetchWalletItemsCollections(
+            $where: collections_bool_exp!
+            $order_by: [collections_order_by!]
+          ) {
+            movement {
+              collections(where: $where, order_by: $order_by) {
+                id
+                slug
+                semantic_slug
+                title
+                cover_url
+                floor
+              }
+            }
+          }
+        `;
+
+        const response = await client.request<CollectionsResponse>(query, {
+          where,
+          order_by
+        });
+        
+        setCollections(response.movement.collections);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error occurred');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCollections();
+  }, [where, order_by]);
+
+  if (loading) return <div className="loading-message">Loading collections...</div>;
+  if (error) return <div className="error-message">Error: {error}</div>;
+
+  return (
+    <div className="collections-table-container">
+      <table className="collections-table">
+        <thead>
+          <tr>
+            <th>Collection</th>
+            <th>Title</th>
+            <th>Floor Price</th>
+          </tr>
+        </thead>
+        <tbody>
+          {collections.map((collection) => (
+            <tr key={collection.id}>
+              <td className="collection-cell">
+                {collection.cover_url && (
+                  <img 
+                    src={collection.cover_url} 
+                    alt={collection.title} 
+                    className="collection-image"
+                  />
+                )}
+                <span className="collection-slug">{collection.slug || collection.semantic_slug}</span>
+              </td>
+              <td>{collection.title}</td>
+              <td className="floor-price">
+                {collection.floor ? `Ξ${collection.floor.toFixed(2)}` : '--'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+export default CollectionsTable;

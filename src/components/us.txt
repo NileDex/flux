@@ -1,0 +1,188 @@
+// import { useState, useEffect } from 'react';
+// import { useAccount } from '@razorlabs/razorkit';
+// import { FaSpinner } from 'react-icons/fa';
+
+
+// interface FungibleAsset {
+//   assetType: string;
+//   amount: string;
+//   tokenStandard: string;
+//   metadata: {
+//     symbol?: string;
+//     name?: string;
+//     decimals?: number;
+//   };
+// }
+
+// export default function FungibleAssets() {
+//   const { address, isConnected } = useAccount();
+//   const [assets, setAssets] = useState<FungibleAsset[]>([]);
+//   const [loading, setLoading] = useState(true);
+//   const [error, setError] = useState<string | null>(null);
+
+//   useEffect(() => {
+//     if (isConnected && address) {
+//       fetchAssets();
+//     } else {
+//       setLoading(false);
+//       setAssets([]);
+//     }
+//   }, [address, isConnected]);
+
+//   const fetchAssets = async () => {
+//     if (!address) {
+//       setLoading(false);
+//       setError("No wallet address available");
+//       return;
+//     }
+
+//     setLoading(true);
+//     setError(null);
+
+//     try {
+//       const response = await fetch('https://indexer.mainnet.movementnetwork.xyz/v1/graphql', {
+//         method: 'POST',
+//         headers: {
+//           'Content-Type': 'application/json',
+//         },
+//         body: JSON.stringify({
+//           query: `
+//             query GetFungibleAssetBalances($address: String) {
+//               current_fungible_asset_balances(
+//                 where: {owner_address: {_eq: $address}, amount: {_gt: "0"}}
+//               ) {
+//                 asset_type
+//                 amount
+//                 token_standard
+//               }
+//             }
+//           `,
+//           variables: { address }
+//         })
+//       });
+
+//       if (!response.ok) {
+//         throw new Error(`Network response was not ok: ${response.status}`);
+//       }
+
+//       const result = await response.json();
+
+//       if (result.errors) {
+//         throw new Error(result.errors[0].message);
+//       }
+
+//       const assetData = result.data?.current_fungible_asset_balances || [];
+
+//       if (assetData.length === 0) {
+//         setAssets([]);
+//         return;
+//       }
+
+//       const processedAssets = assetData.map((asset: any) => {
+//         // Extract symbol and name from asset_type (format: address::module::name)
+//         const parts = asset.asset_type.split('::');
+//         const symbol = parts.length >= 3 ? parts[2] : 'TOKEN';
+//         const name = parts.length >= 2 ? parts[1] : 'Unknown Token';
+
+//         return {
+//           assetType: asset.asset_type,
+//           amount: asset.amount,
+//           tokenStandard: asset.token_standard,
+//           metadata: {
+//             symbol,
+//             name,
+//             decimals: 0 // Default to 0 if not available
+//           }
+//         };
+//       });
+
+//       setAssets(processedAssets);
+//     } catch (err: any) {
+//       console.error('Error fetching fungible assets:', err);
+//       setError(`Failed to fetch assets: ${err.message || 'Unknown error'}`);
+//       setAssets([]);
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
+
+//   const formatAmount = (amount: string, decimals: number = 0) => {
+//     try {
+//       const bigIntAmount = BigInt(amount);
+//       const divisor = BigInt(10 ** decimals);
+//       const whole = bigIntAmount / divisor;
+//       const remainder = bigIntAmount % divisor;
+      
+//       if (remainder === BigInt(0)) {
+//         return whole.toString();
+//       }
+      
+//       return `${whole}.${remainder.toString().padStart(decimals, '0').replace(/0+$/, '')}`;
+//     } catch {
+//       return amount;
+//     }
+//   };
+
+//   return (
+//     <div className="assets-container">
+//       <div className="assets-header">
+//         <h2>Token Balances</h2>
+//         <button onClick={fetchAssets} className="refresh-button" disabled={loading}>
+//           {loading ? <FaSpinner className="loading-spinner" /> : 'Refresh'}
+//         </button>
+//       </div>
+
+//       {loading ? (
+//         <div className="assets-loading">
+//           <FaSpinner className="loading-spinner" />
+//           <p>Loading token balances...</p>
+//         </div>
+//       ) : error ? (
+//         <div className="assets-error">
+//           <p>{error}</p>
+//           <button onClick={fetchAssets} className="retry-button">Retry</button>
+//         </div>
+//       ) : assets.length === 0 ? (
+//         <div className="no-assets">
+//           <p>No token balances found for this wallet on the Movement Network.</p>
+//         </div>
+//       ) : (
+//         <div className="assets-list">
+//           <div className="assets-list-header">
+//             <span>Asset</span>
+//             <span>Balance</span>
+//             <span>Type</span>
+//           </div>
+//           {assets.map((asset) => (
+//             <div 
+//               key={asset.assetType} 
+//               className="asset-item"
+//               role="listitem"
+//               aria-label={`Token: ${asset.metadata.name}, Balance: ${formatAmount(asset.amount, asset.metadata.decimals)}`}
+//             >
+//               <div className="asset-info">
+//                 <div className="asset-icon">
+//                   <img
+//                     src="/placeholder-token.png"
+//                     alt={asset.metadata.name}
+//                     loading="lazy"
+//                   />
+//                 </div>
+//                 <div className="asset-details">
+//                   <h3 className="asset-name">{asset.metadata.name}</h3>
+//                   <p className="asset-symbol">{asset.metadata.symbol}</p>
+//                 </div>
+//               </div>
+//               <div className="asset-amount">
+//                 {formatAmount(asset.amount, asset.metadata.decimals)}
+//               </div>
+//               <div className="asset-type">
+//                 {asset.tokenStandard}
+//               </div>
+//             </div>
+//           ))}
+//         </div>
+//       )}
+//     </div>
+//   );
+// }

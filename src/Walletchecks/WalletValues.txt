@@ -1,0 +1,269 @@
+import { useState, useEffect } from 'react';
+import { gql } from 'graphql-request';
+import { createClient } from '../util/graphqlClient';
+import { WalletDataResponse, WalletValuesProps, FormattedWalletValue } from '../types/nftTypes';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
+import Penguin from '../assets/Penguin.png'; // Add penguin import
+
+type PeriodType = 'days_7' | 'days_30' | 'all_time';
+
+const WalletValues = ({ 
+  walletAddress, 
+  period: initialPeriod = 'days_7' as PeriodType
+}: WalletValuesProps) => {
+  const [data, setData] = useState<FormattedWalletValue[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [period, setPeriod] = useState<PeriodType>(initialPeriod);
+  const [chartLoading, setChartLoading] = useState(false);
+
+  const fetchWalletData = async (period: PeriodType) => {
+    try {
+      const client = createClient();
+      
+      const query = gql`
+        query fetchWalletValues($wallet: String!, $period: WalletHistory!) {
+          movement {
+            wallet_values(address: $wallet, history: $period) {
+              time
+              usd_value
+              value
+            }
+          }
+        }
+      `;
+
+      const response = await client.request<WalletDataResponse>(query, {
+        wallet: walletAddress,
+        period
+      });
+      
+      const formattedData: FormattedWalletValue[] = response.movement.wallet_values.map(item => ({
+        date: new Date(item.time),
+        dateLabel: new Date(item.time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        usdValue: typeof item.usd_value === 'string' 
+          ? parseFloat(item.usd_value) 
+          : item.usd_value,
+        nativeValue: parseFloat(item.value)
+      })).sort((a, b) => a.date.getTime() - b.date.getTime());
+      
+      return formattedData;
+    } catch (err) {
+      throw err instanceof Error ? err : new Error('Failed to fetch wallet data');
+    }
+  };
+
+  // Initial data fetch
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const result = await fetchWalletData(initialPeriod);
+        setData(result);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [walletAddress, initialPeriod]);
+
+  const handlePeriodChange = async (newPeriod: PeriodType) => {
+    if (newPeriod === period) return;
+    
+    setPeriod(newPeriod);
+    setChartLoading(true);
+    
+    try {
+      const result = await fetchWalletData(newPeriod);
+      setData(result);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setChartLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="wallet-state-container loading">
+        <p>Loading wallet data...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="wallet-state-container error">
+        <img src={Penguin} alt="Error" className="playful-penguin empty-penguin"/>
+        <p className="error-message">{error}</p>
+      </div>
+    );
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="wallet-state-container empty">
+        <img src={Penguin} alt="No data" className="playful-penguin empty-penguin" />
+        <p>No wallet data found</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="wallet-values-container">
+      <div className="chart-header">
+        <h2 className="chart-title">Portfolio Value</h2>
+        <div className="chart-period">{period.replace('_', ' ')}</div>
+      </div>
+      
+      <div className="chart-values">
+        <div className="current-value-container">
+          <div className="current-value">
+            ${data[data.length - 1]?.usdValue?.toFixed(2) || '0.00'}
+          </div>
+          <div className="date-display">
+            {data[data.length - 1]?.dateLabel || ''}
+          </div>
+        </div>
+        <div className={`value-change ${data.length > 1 && data[data.length - 1].usdValue < data[0].usdValue ? 'negative' : ''}`}>
+          {data.length > 1 ? (
+            <>
+              {data[data.length - 1].usdValue >= data[0].usdValue ? '↑' : '↓'}
+              {Math.abs(
+                ((data[data.length - 1].usdValue - data[0].usdValue) / data[0].usdValue) * 100
+              ).toFixed(2)}%
+            </>
+          ) : '--'}
+        </div>
+      </div>
+
+      <div className="chart-container">
+        {chartLoading ? (
+          <div className="chart-loading">Loading chart data...</div>
+        ) : (
+          <ResponsiveContainer width="100%" height={250}>
+            <AreaChart
+              data={data}
+              margin={{
+                top: 10,
+                right: 10,
+                left: 10,
+                bottom: 0,
+              }}
+            >
+              <defs>
+                <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#D4AF37" stopOpacity={0.8}/>
+                  <stop offset="95%" stopColor="#8B6914" stopOpacity={0.01}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#2d2d2d" />
+              <XAxis 
+                dataKey="dateLabel"
+                tick={{ fill: '#aaa', fontSize: 11 }}
+                tickMargin={10}
+                tickLine={false}
+                axisLine={false}
+                interval="preserveStartEnd"
+                minTickGap={50}
+                tickFormatter={(value) => {
+                  const parts = value.split(' ');
+                  return `${parts[0]} ${parts[1].replace(',', '')}`;
+                }}
+              />
+              <YAxis 
+                tick={{ fill: '#aaa' }}
+                tickMargin={10}
+                tickLine={false}
+                axisLine={false}
+                domain={['dataMin', 'dataMax']}
+              />
+              <Tooltip 
+                contentStyle={{
+                  background: '#1a1a1a',
+                  borderColor: '#333',
+                  borderRadius: '4px',
+                  color: '#fff'
+                }}
+                formatter={(value) => [`$${value}`, 'Value']}
+                labelFormatter={(label) => `${label}`}
+              />
+              <Area
+                type="monotone"
+                dataKey="usdValue"
+                stroke="#D4AF37"
+                strokeWidth={2}
+                fillOpacity={1}
+                fill="url(#colorValue)"
+                animationDuration={300}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      <div className="chart-footer">
+        <button 
+          className={`period-button ${period === 'days_7' ? 'active' : ''}`}
+          onClick={() => handlePeriodChange('days_7')}
+        >
+          7D
+        </button>
+        <button 
+          className={`period-button ${period === 'days_30' ? 'active' : ''}`}
+          onClick={() => handlePeriodChange('days_30')}
+        >
+          1M
+        </button>
+        <button 
+          className={`period-button ${period === 'all_time' ? 'active' : ''}`}
+          onClick={() => handlePeriodChange('all_time')}
+        >
+          All
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default WalletValues;
+
+
+
+
+
+
+
+import WalletValues from "../Walletchecks/WalletValues";
+
+
+
+
+
+
+
+
+
+{/* 
+          <div className="metrics-section">
+            <div className="wallet-values-card">
+              {selectedAddress ? (
+                <WalletValues walletAddress={selectedAddress} period="days_7" />
+              ) : (
+                <div className="loading-message">Select a wallet to view values</div>
+              )}
+            </div>
+          </div> */}
