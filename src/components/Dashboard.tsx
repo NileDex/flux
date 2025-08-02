@@ -8,6 +8,7 @@ import PortfolioChart from './PortfolioChart';
 import { useNftCount } from './hooks/useNftCount';
 import { usePortfolioTotal } from './hooks/usePortfolioTotal';
 import { useCollectionsCount } from './hooks/useCollectionsCount';
+import { useTransactionCount } from './hooks/useTransactionCount';
 import { useAccount } from '@razorlabs/razorkit';
 import NoWalletMessage from './NoWalletMessage';
 
@@ -26,8 +27,9 @@ const Dashboard = () => {
   const { nftCount, loading: nftLoading } = useNftCount();
   const { portfolioTotal, loading: portfolioLoading } = usePortfolioTotal();
   const { collectionsCount, loading: collectionsLoading } = useCollectionsCount();
+  const { count: transactionCount, loading: transactionLoading } = useTransactionCount();
   
-  console.log('🎯 Dashboard Data:', { nftCount, nftLoading, portfolioTotal, portfolioLoading, collectionsCount, collectionsLoading });
+  console.log('🎯 Dashboard Data:', { nftCount, nftLoading, portfolioTotal, portfolioLoading, collectionsCount, collectionsLoading, transactionCount, transactionLoading });
   
   // Function to mask sensitive values
   const maskValue = (value: string, type: 'currency' | 'count' = 'currency') => {
@@ -45,6 +47,15 @@ const Dashboard = () => {
     setIsBalanceVisible(newVisibility);
     // Save to localStorage to persist across sessions
     localStorage.setItem('balanceVisible', JSON.stringify(newVisibility));
+  };
+
+  const formatNumber = (num: number): string => {
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
   };
   
   const dashboardItems = [
@@ -66,9 +77,10 @@ const Dashboard = () => {
     },
     {
       title: 'Transaction Blocks',
-      value: '',
-      type: 'action',
-      loading: false,
+      value: transactionLoading ? '...' : formatNumber(transactionCount),
+      subtitle: 'blocks',
+      type: 'count',
+      loading: transactionLoading,
       component: address ? <WalletTransactions walletAddress={address} /> : <NoWalletMessage />
     },
     {
@@ -505,4 +517,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default Dashboard; 

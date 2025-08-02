@@ -71,7 +71,8 @@ const Web3TopNavbar = ({ mobileOpen, setMobileOpen }: Web3TopNavbarProps) => {
 
   const navItems = [
     { text: "Dashboard", to: "/dashboard" },
-    { text: "Swap", to: "/swap" }
+    { text: "Swap", to: "/swap" },
+    { text: "Network", to: "/network-transactions" }
   ];
 
   return (

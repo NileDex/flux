@@ -9,6 +9,7 @@ import { useState } from "react";
 
 import Dashboard from "./components/Dashboard";
 import SwapPage from "./components/SwapPage";
+import TotalTransactions from "./components/TotalTransactions";
 import Web3TopNavbar from "./util/Web3TopNavbar";
 import Hero from './components/Hero';
 
@@ -30,6 +31,7 @@ function AppContent() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/swap" element={<SwapPage />} />
+          <Route path="/network-transactions" element={<TotalTransactions />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </div>
